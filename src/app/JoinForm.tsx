@@ -1,11 +1,8 @@
 "use client";
 
-import { useActionState, useRef, useTransition, useEffect, useState } from "react";
-import { joinWhatsAppList, type JoinFormState } from "./actions";
+import { useRef, useEffect, useState } from "react";
 import { CheckCircle2, Send, Loader2 } from "lucide-react";
 import Script from "next/script";
-
-const initialState: JoinFormState = { status: "idle", message: "" };
 
 const STORAGE_KEY_COUNT = "psc_submitted_count";
 const STORAGE_KEY_DONE = "psc_form_already_submitted";
@@ -18,8 +15,9 @@ declare global {
 }
 
 export default function JoinForm() {
-  const [state, formAction] = useActionState(joinWhatsAppList, initialState);
-  const [pending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -30,22 +28,91 @@ export default function JoinForm() {
     }
   }, []);
 
-  // Handle success side effects
-  useEffect(() => {
-    if (state.status === "success") {
-      // Set submission flag
-      localStorage.setItem(STORAGE_KEY_DONE, "true");
-      
-      // Increment global counter
-      const stored = localStorage.getItem(STORAGE_KEY_COUNT);
-      const current = stored ? parseInt(stored, 10) : 87;
-      const next = isNaN(current) ? 88 : current + 1;
-      localStorage.setItem(STORAGE_KEY_COUNT, String(next));
-      window.dispatchEvent(new Event("storage"));
-    }
-  }, [state.status]);
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    setIsPending(true);
 
-  if (isAlreadySubmitted || state.status === "success") {
+    const formData = new FormData(e.currentTarget);
+    const name = String(formData.get("name") ?? "").trim();
+    const phone = String(formData.get("phone") ?? "").trim();
+
+    // 1. Client-side Validation
+    if (name.length < 2) {
+      setError("ദയവായി പേര് ശരിയായി നൽകുക.");
+      setIsPending(false);
+      return;
+    }
+
+    const normalizedPhone = phone
+      .replace(/[\s\-\(\)\.]/g, "")
+      .replace(/^(\+91|91)/, "");
+
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+      setError("ദയവായി സാധുവായ 10 അക്ക നമ്പർ നൽകുക. (ഉദാ: 9845xxxxxx)");
+      setIsPending(false);
+      return;
+    }
+
+    // 2. Get reCAPTCHA Token
+    let recaptchaToken = "";
+    if (typeof window !== "undefined" && window.grecaptcha) {
+      try {
+        recaptchaToken = await window.grecaptcha.execute(RECAPTCHA_SITE_KEY, {
+          action: "submit",
+        });
+      } catch (err) {
+        console.error("reCAPTCHA execution failed", err);
+      }
+    }
+
+    if (!recaptchaToken) {
+      setError("സുരക്ഷാ പരിശോധന നടത്താൻ കഴിഞ്ഞില്ല. ദയവായി പേജ് റിഫ്രഷ് ചെയ്യുക.");
+      setIsPending(false);
+      return;
+    }
+
+    // 3. Call Finepher API Directly
+    try {
+      const response = await fetch("https://api.finepher.com/public/contact-forms/submit/contact", {
+        method: "POST",
+        headers: {
+          "Accept": "*/*",
+          "Content-Type": "application/json",
+          "x-recaptcha-token": recaptchaToken,
+        },
+        body: JSON.stringify({
+          fullName: name,
+          phoneNumber: normalizedPhone,
+          subject: "PSC Landing Page Leads",
+        }),
+      });
+
+      if (response.ok) {
+        // 4. Handle Success
+        setIsSuccess(true);
+        localStorage.setItem(STORAGE_KEY_DONE, "true");
+        
+        // Update Local Counter
+        const stored = localStorage.getItem(STORAGE_KEY_COUNT);
+        const current = stored ? parseInt(stored, 10) : 87;
+        const next = isNaN(current) ? 88 : current + 1;
+        localStorage.setItem(STORAGE_KEY_COUNT, String(next));
+        window.dispatchEvent(new Event("storage"));
+      } else {
+        const errorData = await response.text();
+        console.error("API Error Response:", errorData);
+        setError("ക്ഷമിക്കണം, സേവനത്തിൽ ഒരു തടസ്സം നേരിട്ടു. ദയവായി അല്പം കഴിഞ്ഞ് ശ്രമിക്കുക.");
+      }
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      setError("നെറ്റ്‌വർക്ക് പ്രശ്‌നം കാരണം അയക്കാൻ കഴിഞ്ഞില്ല. ദയവായി വീണ്ടും ശ്രമിക്കുക.");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  if (isAlreadySubmitted || isSuccess) {
     return (
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-psc-100 bg-psc-50/40 p-8 text-center animate-in fade-in zoom-in duration-500">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-hero text-white shadow-card">
@@ -56,28 +123,12 @@ export default function JoinForm() {
             {isAlreadySubmitted ? "നിങ്ങൾ നേരത്തെ രജിസ്റ്റർ ചെയ്തിട്ടുണ്ട്!" : "രജിസ്ട്രേഷൻ വിജയകരം!"}
           </h3>
           <p className="text-base font-medium text-psc-800">
-            {isAlreadySubmitted 
-              ? "ഞങ്ങൾ നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും."
-              : state.message || "ഞങ്ങൾ നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും."}
+            ഞങ്ങൾ നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും.
           </p>
         </div>
       </div>
     );
   }
-
-  const handleSubmit = async (formData: FormData) => {
-    if (typeof window !== "undefined" && window.grecaptcha) {
-      try {
-        const token = await window.grecaptcha.execute(RECAPTCHA_SITE_KEY, {
-          action: "submit",
-        });
-        formData.append("recaptchaToken", token);
-      } catch (err) {
-        console.error("reCAPTCHA execution failed", err);
-      }
-    }
-    startTransition(() => formAction(formData));
-  };
 
   return (
     <>
@@ -86,7 +137,7 @@ export default function JoinForm() {
       />
       <form
         ref={formRef}
-        action={handleSubmit}
+        onSubmit={handleSubmit}
         className="flex flex-col gap-6"
         noValidate
       >
@@ -111,7 +162,7 @@ export default function JoinForm() {
 
         <div className="space-y-2">
           <label htmlFor="phone" className="text-sm font-black text-psc-900 ml-1">
-            വാട്സാപ്പ് നമ്പർ
+            வாട്സാപ്പ് നമ്പർ
           </label>
           <div className="flex gap-2">
             <span className="inline-flex items-center justify-center rounded-2xl bg-psc-100/40 px-5 py-4 text-base font-black text-psc-700">
@@ -130,23 +181,23 @@ export default function JoinForm() {
           </div>
         </div>
 
-        {state.status === "error" && !pending && (
+        {error && !isPending && (
           <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600 animate-in shake-1">
-            {state.message}
+            {error}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={pending}
+          disabled={isPending}
           className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-gradient-hero py-4.5 text-lg font-black text-white shadow-elegant transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 transition-opacity group-hover:opacity-100" />
-          {pending ? (
+          {isPending ? (
             <Loader2 className="h-6 w-6 animate-spin" />
           ) : (
             <>
-              <span>ഇപ്പോൾ ചേരുക — സൗജന്യം</span>
+              <span>ഇപ്പോൾ ചേരുക</span>
               <Send className="h-5 w-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
             </>
           )}

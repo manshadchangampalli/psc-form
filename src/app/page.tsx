@@ -64,7 +64,7 @@ export default function Home() {
 
         <section className="relative">
           <div className="absolute -inset-4 rounded-[2.5rem] bg-psc-500/5 blur-2xl" />
-          <div className="relative rounded-3xl border border-psc-200 bg-white p-8 shadow-elegant sm:p-10">
+          <div className="relative rounded-3xl border border-psc-200 bg-white p-4 shadow-elegant sm:p-4">
             <JoinForm />
           </div>
         </section>
