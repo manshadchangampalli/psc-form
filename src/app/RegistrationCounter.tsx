@@ -3,28 +3,33 @@
 import { useEffect, useState } from "react";
 import { UserCheck } from "lucide-react";
 
-const BASE_COUNT = 87;
-const STORAGE_KEY = "psc_submitted_count";
+const API_URL = "https://api.finepher.com/public/contact-forms/count/psc-enquiry";
 
 export default function RegistrationCounter() {
-  const [count, setCount] = useState(BASE_COUNT);
+  const [count, setCount] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = parseInt(stored, 10);
-      if (!isNaN(parsed)) setCount(parsed);
+    async function fetchCount() {
+      try {
+        const res = await fetch(API_URL, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          // We add the real count to our base social proof number
+          setCount(data.count);
+        }
+      } catch (err) {
+        console.error("Failed to fetch registration count:", err);
+      }
     }
 
-    // Optional: Listen for storage events (if multiple tabs open)
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        setCount(parseInt(e.newValue, 10));
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    fetchCount();
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchCount, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  if (!count) return null;
+
 
   return (
     <div className="flex items-center gap-5 rounded-2xl border border-psc-200 bg-white p-2 shadow-elegant">

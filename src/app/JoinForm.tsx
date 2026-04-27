@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useState } from "react";
 import { CheckCircle2, Send, Loader2 } from "lucide-react";
-import Script from "next/script";
 
 const STORAGE_KEY_COUNT = "psc_submitted_count";
 const STORAGE_KEY_DONE = "psc_form_already_submitted";
@@ -85,6 +84,7 @@ export default function JoinForm() {
           fullName: name,
           phoneNumber: normalizedPhone,
           subject: "PSC Landing Page Leads",
+          message: "...."
         }),
       });
 
@@ -92,7 +92,7 @@ export default function JoinForm() {
         // 4. Handle Success
         setIsSuccess(true);
         localStorage.setItem(STORAGE_KEY_DONE, "true");
-        
+
         // Update Local Counter
         const stored = localStorage.getItem(STORAGE_KEY_COUNT);
         const current = stored ? parseInt(stored, 10) : 87;
@@ -132,9 +132,6 @@ export default function JoinForm() {
 
   return (
     <>
-      <Script
-        src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
-      />
       <form
         ref={formRef}
         onSubmit={handleSubmit}
