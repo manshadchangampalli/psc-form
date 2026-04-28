@@ -73,7 +73,7 @@ export default function JoinForm() {
 
     // 3. Call Finepher API Directly
     try {
-      const response = await fetch("https://api.finepher.com/public/contact-forms/submit/contact", {
+      const response = await fetch("https://api.finepher.com/public/contact-forms/submit/psc-enquiry", {
         method: "POST",
         headers: {
           "Accept": "*/*",
@@ -84,6 +84,7 @@ export default function JoinForm() {
           fullName: name,
           phoneNumber: normalizedPhone,
           subject: "PSC Landing Page Leads",
+          email: "manshad@gmail.com",
           message: "...."
         }),
       });
